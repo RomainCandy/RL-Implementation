@@ -18,14 +18,14 @@ class LinearPolicy:
         self.input_size = input_size
         self.output_size = output_size
         self.theta = np.zeros((output_size, input_size))
-        self.mean = 0
-        self.var = .2
+        self.norm = Normalize(self.input_size)
 
     def act(self, state: np.array):
-        return np.dot(self.theta, (state - self.mean) / np.sqrt(self.var))
+        state = self.norm(state, update=False)
+        return np.dot(self.theta, state)
 
     def noisy_act(self, noise: np.array, state: np.array):
-        state = (state - self.mean) / np.sqrt(self.var)
+        state = self.norm(state, update=True)
         return np.dot(self.theta + noise, state)
 
 
@@ -40,7 +40,6 @@ class AgentBRS:
         self.env = env
         input_size = env.observation_space.shape[0]
         output_size = env.action_space.shape[0]
-        self.norm = Normalize(input_size)
         self.policy = LinearPolicy(input_size, output_size)
         self.record_video = False
         self.record_every = 50
@@ -52,12 +51,9 @@ class AgentBRS:
         state = self.env.reset()
         rewards = 0
         for _ in count(0):
-            self.norm.update(state)
-            self.policy.mean = self.norm.get_mean()
-            self.policy.var = self.norm.get_var()
             action = self.policy.noisy_act(noise, state)
             state, reward, done, _ = self.env.step(action)
-            reward = max(min(reward, 1), -1)
+            # reward = max(min(reward, 1), -1)
             rewards += reward
             if done:
                 break
@@ -68,13 +64,11 @@ class AgentBRS:
         rewards = 0
         training_reward = 0
         for _ in count(0):
-            # self.norm.update(state)
-            # self.policy.mean = self.norm.get_mean()
-            # self.policy.var = self.norm.get_var()
             action = self.policy.act(state)
             state, reward, done, _ = self.env.step(action)
-            tr_reward = max(min(reward, 1), -1)
-            training_reward += tr_reward
+            # tr_reward = max(min(reward, 1), -1)
+            # training_reward += tr_reward
+            training_reward += reward
             rewards += reward
             if done:
                 break
@@ -82,9 +76,9 @@ class AgentBRS:
 
     def learn(self, num_episode: int, step_size: float, std_noise: float, batch_size: int, num_best_dir: int,
               threshold: float):
-        running_mean = deque(maxlen=100)
+        best = float('-infinity')
         best_dir = BestDirection(num_best_dir)
-        for ep in range(num_episode):
+        for ep in range(1, num_episode + 1):
             best_dir.reset()
             noises = np.random.randn(batch_size, self.policy.output_size, self.policy.input_size) * std_noise
             for noise in noises:
@@ -97,35 +91,46 @@ class AgentBRS:
             update = step_size / (np.std(store) * num_best_dir) * mini_batch
             self.policy.theta += update
 
-            if ep % self.record_every == 0:
-                np.save(os.path.join(self.monitor_dir, "ep{}_{}.npy".format(ep, self.env_name)), self.policy.theta)
+            if ep % self.record_every == 0 or ep == 1:
+                # np.save(os.path.join(self.monitor_dir, "ep{}_{}.npy".format(ep, self.env_name)), self.policy.theta)
                 self.record_video = True
 
-            # Play an episode with the new weights
-            reward_evaluation, training_evaluation = self.evaluate()
+                # Play 100 episodes with the new weights
+                running_mean = deque(maxlen=100)
+                reward_evaluation, _ = self.evaluate()
+                running_mean.append(reward_evaluation)
+                self.record_video = False
+                for hum in range(99):
+                    reward_evaluation, _ = self.evaluate()
+                    running_mean.append(reward_evaluation)
+                self.logger("ep: {}/{:<10}\tmean reward:{:<10.2f}\tstd reward:{:<10.2f}"
+                            "min rollout:{:<10.2f}\tmax rollout:{:<10.2f}".format(ep, num_episode,
+                                                                                  np.mean(running_mean),
+                                                                                  np.std(running_mean),
+                                                                                  min(store), max(store)))
+                zz = np.mean(running_mean)
+
+                if zz >= threshold:
+                    np.save(os.path.join(self.monitor_dir, "Best{}_ep{}.npy".format(self.env_name, ep)), self.policy.theta)
+                    with open(os.path.join(self.monitor_dir, 'solve{}.txt'.format(self.env_name)), 'w') as file:
+                        file.write("solved in {} episodes".format(ep - 100))
+                    return
+                elif zz >= threshold * .75:
+                    np.save(os.path.join(self.monitor_dir, "Good{}_ep{}.npy".format(self.env_name, ep)),
+                            self.policy.theta)
+
+                elif zz >= threshold * .5:
+                    np.save(os.path.join(self.monitor_dir, "OK{}_ep.npy".format(self.env_name, ep)), self.policy.theta)
+
+                if running_mean[0] >= threshold:
+                    np.save(os.path.join(self.monitor_dir, "Solved1Time{}_ep{}.npy".format(self.env_name, ep)),
+                            self.policy.theta)
+                if running_mean[0] >= best:
+                    best = running_mean[0]
+                    np.save(os.path.join(self.monitor_dir, "Best_so_far{:.2f}_{}_ep{}.npy".format(best, self.env_name, ep)),
+                            self.policy.theta)
+
             self.record_video = False
-            running_mean.append(reward_evaluation)
-            if ep % 10 == 0:
-                self.logger("ep: {}/{}\treward: {:.2f}\ttraining reward: "
-                            "{:.2f}\trunning mean: {:.2f} ".format(ep, num_episode,reward_evaluation,
-                                                                   training_evaluation, np.mean(running_mean)))
-
-            zz = np.mean(running_mean)
-
-            if zz >= threshold:
-                np.save(os.path.join(self.monitor_dir, "Best{}_ep{}.npy".format(self.env_name, ep)), self.policy.theta)
-                with open(os.path.join(self.monitor_dir, 'solve{}.txt'.format(self.env_name)), 'w') as file:
-                    file.write("solved in {} episodes".format(ep - 100))
-                return
-            elif zz >= threshold * .75:
-                np.save(os.path.join(self.monitor_dir, "Good{}_ep{}.npy".format(self.env_name, ep)), self.policy.theta)
-
-            elif zz >= threshold * .5:
-                np.save(os.path.join(self.monitor_dir, "OK{}_ep.npy".format(self.env_name, ep)), self.policy.theta)
-
-            if running_mean[-1] >= threshold:
-                np.save(os.path.join(self.monitor_dir, "Solved1Time{}_ep{}.npy".format(self.env_name, ep)),
-                        self.policy.theta)
 
 
 def mkdir(base, name):
@@ -208,5 +213,5 @@ def run_experiment(directory, num_episode, seed, env_name,
 
 
 if __name__ == "__main__":
-    run_experiment(directory="lul", num_episode=3000, seed=1946, env_name="BipedalWalker-v2",
-                   step_size=0.02, noise=0.03, batch_size=8, num_best_dir=4, threshold=300)
+    run_experiment(directory="lul", num_episode=3000, seed=237, env_name="LunarLanderContinuous-v2",
+                   step_size=0.02, noise=0.03, batch_size=8, num_best_dir=4, threshold=200)

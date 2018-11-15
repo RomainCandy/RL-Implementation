@@ -14,8 +14,9 @@ BidepHardSearch = Search(env_name="BipedalWalkerHardcore-v2", threshold=300, ste
                          std_noise=[0.01, 0.02], batch_size=[8, 16, 16, 32], num_best_dir=[4, 8, 16, 32], seed=[1946])
 
 
-LunarSearch = Search(env_name="LunarLanderContinuous-v2", threshold=200, step_size=[0.01, 0.02],
-                     std_noise=[0.01, 0.02], batch_size=[8, 16, 32], num_best_dir=[4, 8, 32], seed=[1946])
+LunarSearch = Search(env_name="LunarLanderContinuous-v2", threshold=200, step_size=[0.02],
+                     std_noise=[0.03], batch_size=[8, 8, 16, 16, 32, 32], num_best_dir=[4, 8, 8, 16, 16, 32],
+                     seed=[4, 8])
 
 
 def get_all(envSearch: Search):

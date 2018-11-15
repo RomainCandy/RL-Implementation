@@ -18,11 +18,28 @@ class Normalize:
         delta2 = state - self.running_mean
         self.running_var += delta * delta2
 
-    def get_mean(self):
+    @property
+    def mean(self):
         return self.running_mean
 
-    def get_var(self):
-        return (self.running_var / self.count).clip(min=1e-6)
+    @property
+    def var(self):
+        if self.count == 1:
+            return self.running_mean ** 2
+        return self.running_var / (self.count - 1)
+
+    @property
+    def std(self):
+        std = np.sqrt(self.var)
+        std[std < 1e-7] = float("inf")
+        return std
+
+    def __call__(self, state, update):
+        if update:
+            self.update(state)
+
+        norm_state = (state - self.mean) / (self.std + 1e-8)
+        return norm_state
 
     def reset(self):
         self.running_mean = np.zeros(shape=self.states_shape)
