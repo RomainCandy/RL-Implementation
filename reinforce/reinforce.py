@@ -92,7 +92,7 @@ class ReinforceAgent:
         batch = SavedAction(*zip(*self.saved_actions))
         batch = torch.cat(batch.log_prob)
         # print("batch: ", batch)
-        loss = (-batch * disc_reward).sum()
+        loss = (-batch * disc_reward).mean()
         # print(loss.item())
         self.optim.zero_grad()
         loss.backward()
@@ -113,10 +113,11 @@ class ReinforceAgent:
             self._learn()
 
 
-# env = gym.make("MountainCar-v0")
-env = gym.make("CartPole-v1")
-# env = gym.make("LunarLander-v2")
-# env = gym.make("Acrobot-v1")
-agent = ReinforceAgent(env)
-agent.learn(3000)
-env.close()
+if __name__ == '__main__':
+    # env = gym.make("MountainCar-v0")
+    env = gym.make("CartPole-v1")
+    # env = gym.make("LunarLander-v2")
+    # env = gym.make("Acrobot-v1")
+    agent = ReinforceAgent(env)
+    agent.learn(3000)
+    env.close()

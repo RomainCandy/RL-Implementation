@@ -1,11 +1,14 @@
 import numpy as np
 import heapq
+from functools import reduce
 
 
 class Normalize:
 
     def __init__(self, states_shape):
         self.states_shape = states_shape
+        # print(states_shape)
+        # self.state_shape = reduce(lambda x, y: x * y, states_shape, 1)
         self.running_mean = np.zeros(shape=states_shape)
         self.running_var = np.zeros(shape=states_shape)
         self.count = 0
@@ -64,6 +67,12 @@ class BestDirection:
     def reset(self):
         self.data = []
 
+    def __getitem__(self, item):
+        return self.data[item]
+
+    def __repr__(self):
+        return repr(self.data)
+
 
 class Rewards:
     def __init__(self, data, noise):
@@ -79,6 +88,8 @@ class Rewards:
         return max(self.data) < max(other.data)
 
     def add(self):
+        if isinstance(self.noise, tuple):
+            return [(self.data[0] - self.data[1]) * noise for noise in self.noise]
         return (self.data[0] - self.data[1]) * self.noise
 
     def __str__(self):

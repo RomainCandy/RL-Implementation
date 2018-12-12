@@ -76,7 +76,7 @@ class AgentDQN:
         loss = (b_ISWeights * F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))).mean()
         if self.prio:
             abs_error = (state_action_values - expected_state_action_values.unsqueeze(1)).abs().detach().numpy()
-            self.buffer.update(b_idx, abs_error.reshape(-1))
+            self.buffer.update(b_idx, abs_error.reshape(-1).clip(0, 1))
 
         self.optim.zero_grad()
         loss.backward()
@@ -145,7 +145,7 @@ class AgentDQN:
                     print("episode: ", len(episode_rewards), "mean: ", np.mean(episode_rewards[-10:]))
                     print("="*100)
                     if np.mean(episode_rewards[-10:]) > -200:
-                        torch.save({'state_dict': self.model.state_dict()}, 'OkMountainCara.pth.tar')
+                        torch.save({'state_dict': self.model.state_dict()}, 'OkMountainCaro.pth.tar')
                 episode_rewards.append(0.0)
                 self.epsilon = max(self.epsilon * .99, 0.001)
             self.replay(t)
@@ -177,4 +177,4 @@ class AgentDQN:
                     break
 
         self.env.close()
-        torch.save({'state_dict': self.model.state_dict()}, 'DDDQNPERMountainCar.pth.tar')
+        torch.save({'state_dict': self.model.state_dict()}, 'DDDQNPERMountainCaro.pth.tar')
